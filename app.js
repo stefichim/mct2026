@@ -19,6 +19,21 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
 
   const reader = new FileReader();
   reader.onload = (evt) => {
+    const xml = new DOMParser().parseFromString(evt.target.result, "text/xml");
+    const geojson = toGeoJSON.gpx(xml);
+    processData(geojson);
+  };
+  reader.readAsText(file);
+});
+
+function processData(geojson) {
+  trackData = [];
+  let totalDist = 0;
+
+  // Extract name and pick a color
+  const trackFeature = geojson.features.find(f => f.geometry.type === "LineString");
+  const trackName = trackFeature.properties.name || "Track";
+  
   // Deterministic color based on name
   let hash = 0;
   for (let i = 0; i < trackName.length; i++) hash = trackName.charCodeAt(i) + ((hash << 5) - hash);
