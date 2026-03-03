@@ -2,7 +2,12 @@
 // Replace with your actual Mapbox Token
 mapboxgl.accessToken = 'pk.eyJ1IjoiYW5kcmVpbW9sZG92YW4iLCJhIjoiY2t2bGI4bTFnMnA0bDJ2cTVjdnd5ejg4ciJ9.efC4UMaX2e0Yft-Qs9wEBQ';
 
-
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/outdoors-v12', // Outdoors style is best for GPX
+  center: [0, 0],
+  zoom: 2
+});
 
 let chart, trackData = [];
 const palette = ['#007bff', '#ff4757', '#2ed573', '#ffa502', '#6f42c1'];
@@ -14,21 +19,6 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
 
   const reader = new FileReader();
   reader.onload = (evt) => {
-    const xml = new DOMParser().parseFromString(evt.target.result, "text/xml");
-    const geojson = toGeoJSON.gpx(xml);
-    processData(geojson);
-  };
-  reader.readAsText(file);
-});
-
-function processData(geojson) {
-  trackData = [];
-  let totalDist = 0;
-
-  // Extract name and pick a color
-  const trackFeature = geojson.features.find(f => f.geometry.type === "LineString");
-  const trackName = trackFeature.properties.name || "Track";
-  
   // Deterministic color based on name
   let hash = 0;
   for (let i = 0; i < trackName.length; i++) hash = trackName.charCodeAt(i) + ((hash << 5) - hash);
