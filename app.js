@@ -2,12 +2,7 @@
 // Replace with your actual Mapbox Token
 mapboxgl.accessToken = 'pk.eyJ1IjoiYW5kcmVpbW9sZG92YW4iLCJhIjoiY2t2bGI4bTFnMnA0bDJ2cTVjdnd5ejg4ciJ9.efC4UMaX2e0Yft-Qs9wEBQ';
 
-const map = new mapboxgl.Map({
-  container: 'map',
-  style: 'mapbox://styles/mapbox/outdoors-v12', // Outdoors style is best for GPX
-  center: [0, 0],
-  zoom: 2
-})
+
 
 let chart, trackData = [];
 const palette = ['#007bff', '#ff4757', '#2ed573', '#ffa502', '#6f42c1'];
