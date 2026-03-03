@@ -17,6 +17,12 @@
 </head>
 <body>
   <div class="top-bar">
+    <div class="segment-calc">
+  From: <input type="number" id="kmA" step="0.1" placeholder="0"> km
+  To: <input type="number" id="kmB" step="0.1" placeholder="10"> km
+  <button onclick="calculateSegmentGain()">Calc Gain</button>
+  <span id="segmentResult"></span>
+</div>
     <div class="controls">
       <input type="file" id="fileInput" accept=".gpx" />
       <button onclick="resetZoom()">Reset Zoom</button>

@@ -175,3 +175,42 @@ function haversine(a, b) {
   const h = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+
+function calculateSegmentGain() {
+  const kmA = parseFloat(document.getElementById('kmA').value);
+  const kmB = parseFloat(document.getElementById('kmB').value);
+  const resultSpan = document.getElementById('segmentResult');
+
+  if (isNaN(kmA) || isNaN(kmB)) {
+    alert("Please enter valid numbers for both intervals.");
+    return;
+  }
+
+  // Filter trackData to find points within the range
+  const segment = trackData.filter(p => p.dist >= kmA && p.dist <= kmB);
+
+  if (segment.length < 2) {
+    resultSpan.innerText = " | No data in range";
+    return;
+  }
+
+  let segmentGain = 0;
+  for (let i = 1; i < segment.length; i++) {
+    const diff = segment[i].ele - segment[i - 1].ele;
+    if (diff > 0) {
+      segmentGain += diff;
+    }
+  }
+
+  resultSpan.innerHTML = ` | <b>Gain: ${Math.round(segmentGain)}m</b>`;
+  
+  // Optional: Highlight the segment on the chart
+  highlightChartSegment(kmA, kmB);
+}
+
+// Visual feedback: Zoom the chart to that specific segment
+function highlightChartSegment(a, b) {
+  if (chart) {
+    chart.zoomScale('x', { min: a, max: b }, 'original');
+  }
+}
