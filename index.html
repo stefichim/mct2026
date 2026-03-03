@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>GPX Mapbox Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+  <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="top-bar">
+    <div class="controls">
+      <input type="file" id="fileInput" accept=".gpx" />
+      <button onclick="resetZoom()">Reset Zoom</button>
+    </div>
+    <div id="info">Waiting for file...</div>
+  </div>
+
+  <div id="map"></div>
+  <div class="chart-wrapper">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

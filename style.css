@@ -1,0 +1,64 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-bar {
+  background: #222;
+  color: white;
+  padding: 10px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 1000;
+}
+
+#map {
+  flex: 1; /* Takes remaining space */
+  width: 100%;
+  background: #ddd;
+}
+
+.chart-wrapper {
+  height: 250px;
+  background: #fff;
+  border-top: 2px solid #444;
+  padding: 10px;
+  position: relative;
+}
+
+button {
+  cursor: pointer;
+  padding: 5px 10px;
+  background: #444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+
+button:hover { background: #666; }
+
+/* ... keep your existing desktop styles ... */
+
+@media (max-width: 600px) {
+  .top-bar {
+    flex-direction: column;
+    gap: 10px;
+    padding: 5px;
+    font-size: 12px;
+  }
+  
+  .chart-wrapper {
+    height: 200px; /* Slightly shorter for mobile */
+  }
+
+  button {
+    width: 100%; /* Easier to tap */
+    padding: 10px;
+  }
+}
