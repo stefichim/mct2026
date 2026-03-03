@@ -7,7 +7,7 @@ const map = new mapboxgl.Map({
   style: 'mapbox://styles/mapbox/outdoors-v12', // Outdoors style is best for GPX
   center: [0, 0],
   zoom: 2
-});
+})
 
 let chart, trackData = [];
 const palette = ['#007bff', '#ff4757', '#2ed573', '#ffa502', '#6f42c1'];
