@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ro">
 <head>
   <meta charset="utf-8" />
-  <title>GPX Mapbox Viewer</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPX Viewer - Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
@@ -19,23 +19,23 @@
   
   <div class="top-bar">
     <div class="segment-calc">
-  From: <input type="number" id="kmA" step="0.1" placeholder="0"> km
-  To: <input type="number" id="kmB" step="0.1" placeholder="10"> km
-  <button onclick="calculateSegmentGain()">Calc Gain</button>
-  <span id="segmentResult"></span>
-</div>
+      De la: <input type="number" id="kmA" step="0.1" placeholder="0"> km
+      La: <input type="number" id="kmB" step="0.1" placeholder="10"> km
+      <button onclick="calculateSegmentGain()">Calculează</button>
+      <span id="segmentResult"></span>
+    </div>
     <div class="controls">
       <input type="file" id="fileInput" accept=".gpx" />
-      <button onclick="resetZoom()">Reset Zoom</button>
+      <button onclick="fullReset()">Reset Vizual</button>
     </div>
-    <div id="info">Waiting for file...</div>
+    <div id="info">Așteptare fișier...</div>
   </div>
 
-<div id="map"></div>
+  <div id="map"></div>
 
-<div class="chart-wrapper">
-  <canvas id="chart"></canvas>
-</div>
+  <div class="chart-wrapper">
+    <canvas id="chart"></canvas>
+  </div>
 
   <script src="app.js"></script>
 </body>

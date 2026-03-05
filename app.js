@@ -1,3 +1,8 @@
+/**
+ * GPX Viewer - Full Stable Version
+ * Fixes: Elevation filter (Z < 0), Map Navigation, Nord Reset, Segment Calc
+ */
+
 mapboxgl.accessToken = 'pk.eyJ1IjoiYW5kcmVpbW9sZG92YW4iLCJhIjoiY2t2bGI4bTFnMnA0bDJ2cTVjdnd5ejg4ciJ9.efC4UMaX2e0Yft-Qs9wEBQ';
 
 let chart, trackData = [], allBounds;
@@ -6,28 +11,40 @@ let chart, trackData = [], allBounds;
 const map = new mapboxgl.Map({
     container: 'map',
     style: 'mapbox://styles/mapbox/outdoors-v12',
-    center: [0, 0], // Centrul coordonatelor (Oceanul Atlantic/Ecuator)
-    zoom: 1.5,      // Zoom mic pentru a vedea tot globul
-    cooperativeGestures: true 
+    center: [0, 0],
+    zoom: 1.5,
+    cooperativeGestures: false 
 });
 
-// Adăugăm controlul de locație pentru a te găsi oriunde pe glob
+// Adaugă butoane Navigare: Zoom și BUSOLA (NORD)
+map.addControl(new mapboxgl.NavigationControl({
+    showCompass: true,
+    showZoom: true,
+    visualizePitch: true
+}), 'top-right');
+
+// Buton Locație
 map.addControl(new mapboxgl.GeolocateControl({
     positionOptions: { enableHighAccuracy: true },
     trackUserLocation: true,
     showUserHeading: true
 }), 'top-right');
 
+// 2. ÎNCĂRCARE GPX
 document.getElementById("fileInput").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     document.getElementById("info").innerText = "Se procesează...";
     reader.onload = (evt) => {
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(evt.target.result, "text/xml");
-        const geojson = toGeoJSON.gpx(xml);
-        processData(geojson);
+        try {
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(evt.target.result, "text/xml");
+            const geojson = toGeoJSON.gpx(xml);
+            processData(geojson);
+        } catch (err) {
+            alert("Eroare la procesarea fișierului.");
+        }
     };
     reader.readAsText(file);
 });
@@ -36,10 +53,10 @@ function processData(geojson) {
     trackData = [];
     let totalDist = 0;
     const feature = geojson.features.find(f => f.geometry.type === 'LineString');
-    if (!feature) return;
+    if (!feature) return alert("GPX-ul nu conține un traseu valid.");
 
     feature.geometry.coordinates.forEach((c, i) => {
-        // FILTRU Z: Eliminăm erorile sub nivelul mării
+        // FILTRU Z: Ignoră valorile sub nivelul mării
         let z = c[2] || 0;
         if (z < 0) z = 0; 
 
@@ -51,12 +68,14 @@ function processData(geojson) {
 
     renderMap(geojson);
     renderChart('#007bff');
+    document.getElementById("info").innerText = `Traseu încărcat (${totalDist.toFixed(1)} m total)`;
 }
+
+// 3. GRAFIC (Cu Zoom și Drag activat)
 
 function renderChart(color) {
     if (chart) chart.destroy();
     const ctx = document.getElementById("chart").getContext("2d");
-    
     const maxDist = trackData[trackData.length - 1].dist;
 
     chart = new Chart(ctx, {
@@ -79,14 +98,7 @@ function renderChart(color) {
             plugins: {
                 legend: { display: false },
                 zoom: {
-                    limits: {
-                        // Limite pentru a preveni îngustarea profilului
-                        x: { 
-                            min: 0, 
-                            max: maxDist, 
-                            minRange: 0.2 // Minim 200m vizibili pe grafic
-                        }
-                    },
+                    limits: { x: { min: 0, max: maxDist, minRange: 0.2 } },
                     zoom: {
                         wheel: { enabled: true },
                         pinch: { enabled: true },
@@ -106,16 +118,8 @@ function renderChart(color) {
                 }
             },
             scales: {
-                x: { 
-                    type: 'linear', 
-                    min: 0, 
-                    max: maxDist,
-                    ticks: { font: { size: 10 } } 
-                },
-                y: { 
-                    min: 0, 
-                    ticks: { font: { size: 10 } } 
-                }
+                x: { type: 'linear', min: 0, max: maxDist, ticks: { font: { size: 10 } } },
+                y: { min: 0, ticks: { font: { size: 10 } } }
             },
             onHover: (e, elements) => {
                 if (elements.length > 0) {
@@ -126,19 +130,54 @@ function renderChart(color) {
                             geometry: { type: 'Point', coordinates: [p.lon, p.lat] }
                         });
                     }
-                    document.getElementById("info").innerHTML = `<b>${p.dist} km</b> | Alt: <b>${p.ele} m</b>`;
                 }
             }
         }
     });
 }
 
+// 4. CALCUL SEGMENT MANUAL
+function calculateSegmentGain() {
+    const kmA = parseFloat(document.getElementById('kmA').value) || 0;
+    const kmB = parseFloat(document.getElementById('kmB').value) || 0;
+    const start = Math.min(kmA, kmB);
+    const end = Math.max(kmA, kmB);
+    
+    const segment = trackData.filter(p => p.dist >= start && p.dist <= end);
+    if (segment.length < 2) {
+        document.getElementById('segmentResult').innerText = "Interval invalid.";
+        return;
+    }
+
+    let gain = 0;
+    for (let i = 1; i < segment.length; i++) {
+        const diff = segment[i].ele - segment[i - 1].ele;
+        if (diff > 0) gain += diff;
+    }
+
+    document.getElementById('segmentResult').innerHTML = `↑${Math.round(gain)}m urcare`;
+    
+    // Zoom harta pe segmentul respectiv
+    const bounds = new mapboxgl.LngLatBounds();
+    segment.forEach(p => bounds.extend([p.lon, p.lat]));
+    map.fitBounds(bounds, { padding: 50 });
+}
+
+// 5. RESETARE COMPLETĂ
+function fullReset() {
+    if (chart) chart.resetZoom();
+    if (allBounds) map.fitBounds(allBounds, { padding: 40 });
+    // Resetează Nordul și Înclinarea
+    map.easeTo({ bearing: 0, pitch: 0 });
+}
+
+// 6. UTILS
 function syncMapToZoom(minKm, maxKm) {
     const segment = trackData.filter(p => p.dist >= minKm && p.dist <= maxKm);
     if (segment.length < 2) return;
     const bounds = new mapboxgl.LngLatBounds();
     segment.forEach(p => bounds.extend([p.lon, p.lat]));
-    map.fitBounds(bounds, { padding: 50, duration: 800 });
+    map.fitBounds(bounds, { padding: 50 });
 }
 
 function renderMap(geojson) {
