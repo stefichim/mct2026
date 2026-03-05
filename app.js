@@ -1,76 +1,361 @@
 mapboxgl.accessToken = 'pk.eyJ1IjoiYW5kcmVpbW9sZG92YW4iLCJhIjoiY2t2bGI4bTFnMnA0bDJ2cTVjdnd5ejg4ciJ9.efC4UMaX2e0Yft-Qs9wEBQ';
 
-let chart, trackData = [], allBounds, currentGeoJSON = null;
+let chart;
+let trackData = [];
+let poiPoints = [];
+let allBounds;
+let currentGeoJSON = null;
+let poiGeoJSON = null;
 
 const map = new mapboxgl.Map({
     container: 'map',
     style: 'mapbox://styles/mapbox/outdoors-v12',
-    center: [0, 0],
-    zoom: 1.5,
-    cooperativeGestures: false, // Un singur deget pe mobil
-    dragPan: true
+    center: [0,0],
+    zoom: 2
 });
 
-function changeStyle(styleUrl) {
-    map.setStyle(styleUrl);
-    map.once('style.load', () => {
-        if (currentGeoJSON) renderMap(currentGeoJSON);
-    });
-}
+map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-map.addControl(new mapboxgl.NavigationControl({ showCompass: true }), 'top-right');
-map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), 'top-right');
 
-document.getElementById("fileInput").addEventListener("change", (e) => {
+// ============================
+// FILE INPUT TRASEU
+// ============================
+
+document.getElementById("fileInput").addEventListener("change", (e)=>{
+
     const file = e.target.files[0];
-    if (!file) return;
+    if(!file) return;
+
+    const fileName = file.name.toLowerCase();
     const reader = new FileReader();
-    reader.onload = (evt) => {
-        try {
-            const parser = new DOMParser();
-            const xml = parser.parseFromString(evt.target.result, "text/xml");
-            const geojson = toGeoJSON.gpx(xml);
+
+    reader.onload = (evt)=>{
+
+        try{
+
+            let geojson;
+            const content = evt.target.result;
+
+            if(fileName.endsWith('.geojson') || fileName.endsWith('.json')){
+
+                geojson = JSON.parse(content);
+
+            }else{
+
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(content,"text/xml");
+
+                geojson = fileName.endsWith('.kml')
+                    ? toGeoJSON.kml(xml)
+                    : toGeoJSON.gpx(xml);
+
+            }
+
             currentGeoJSON = geojson;
             processData(geojson);
-        } catch (err) { alert("Eroare la procesarea GPX-ului."); }
+
+        }catch(err){
+
+            console.error(err);
+            alert("Eroare la procesarea fișierului");
+
+        }
+
     };
+
     reader.readAsText(file);
+
 });
 
-function processData(geojson) {
+
+// ============================
+// FILE INPUT POI
+// ============================
+
+document.getElementById("poiInput").addEventListener("change",(e)=>{
+
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (evt)=>{
+
+        try{
+
+            poiGeoJSON = JSON.parse(evt.target.result);
+            addPOILayer(poiGeoJSON);
+
+        }catch(err){
+
+            console.error(err);
+            alert("GeoJSON POI invalid");
+
+        }
+
+    };
+
+    reader.readAsText(file);
+
+});
+
+
+// ============================
+// PROCESS DATA
+// ============================
+
+function processData(geojson){
+
     let rawData = [];
     let totalDist = 0;
-    const feature = geojson.features.find(f => f.geometry.type === 'LineString');
-    if (!feature) return;
 
-    const coords = feature.geometry.coordinates;
-    coords.forEach((c) => {
-        let z = c[2] || 0;
-        if (z < 0) z = 0;
-        rawData.push({ lon: c[0], lat: c[1], ele: z });
+    const routeFeature = geojson.features.find(f =>
+        f.geometry.type === 'LineString' ||
+        f.geometry.type === 'MultiLineString'
+    );
+
+    if(!routeFeature) return;
+
+    const coords = routeFeature.geometry.type === 'MultiLineString'
+        ? routeFeature.geometry.coordinates.flat()
+        : routeFeature.geometry.coordinates;
+
+    coords.forEach(c=>{
+
+        rawData.push({
+            lon:c[0],
+            lat:c[1],
+            ele:c[2] || 0
+        });
+
     });
 
-    // SMOOTHING: Moving Average (5 puncte)
-    trackData = rawData.map((pt, i, arr) => {
-        const windowSize = 5;
-        const startIdx = Math.max(0, i - Math.floor(windowSize / 2));
-        const endIdx = Math.min(arr.length, startIdx + windowSize);
-        const subSet = arr.slice(startIdx, endIdx);
-        const avgEle = subSet.reduce((sum, p) => sum + p.ele, 0) / subSet.length;
+    trackData = rawData.map((pt,i,arr)=>{
 
-        if (i > 0) totalDist += haversine(arr[i-1], pt);
-        
-        return {
+        if(i>0)
+            totalDist += haversine(arr[i-1],pt);
+
+        return{
             ...pt,
-            ele: Math.round(avgEle),
-            dist: Number((totalDist / 1000).toFixed(3))
+            dist:totalDist/1000
         };
+
     });
 
-    renderMap(geojson);
     renderChart('#007bff');
-    document.getElementById("info").innerText = `Traseu: ${(totalDist / 1000).toFixed(2)} km`;
+    renderMap(geojson);
+
 }
+
+
+// ============================
+// RENDER MAP
+// ============================
+
+function renderMap(geojson) {
+    if (map.getLayer('route')) map.removeLayer('route');
+    if (map.getSource('route')) map.removeSource('route');
+    if (map.getLayer('hover-point')) map.removeLayer('hover-point');
+    if (map.getSource('hover-point')) map.removeSource('hover-point');
+    map.addSource('route', { type: 'geojson', data: geojson });
+    map.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#007bff', 'line-width': 4 }});
+    map.addSource('hover-point', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Point', coordinates: [] }}});
+    map.addLayer({ id: 'hover-point', type: 'circle', source: 'hover-point', paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-width': 2, 'circle-stroke-color': '#007bff' }});
+    allBounds = new mapboxgl.LngLatBounds();
+    geojson.features[0].geometry.coordinates.forEach(c => allBounds.extend(c));
+    map.fitBounds(allBounds, { padding: 40 });
+}
+
+/*
+function renderMap(geojson){
+
+    if(map.getLayer('route')) map.removeLayer('route');
+    if(map.getSource('route')) map.removeSource('route');
+
+    map.addSource('route',{
+        type:'geojson',
+        data:geojson
+    });
+
+    map.addLayer({
+        id:'route',
+        type:'line',
+        source:'route',
+        paint:{
+            'line-color':'#007bff',
+            'line-width':4
+        }
+    });
+
+    map.addSource('hover-point',{
+        type:'geojson',
+        data:{
+            type:'Feature',
+            geometry:{type:'Point',coordinates:[]}
+        }
+    });
+
+    map.addLayer({
+        id:'hover-point',
+        type:'circle',
+        source:'hover-point',
+        paint:{
+            'circle-radius':7,
+            'circle-color':'white',
+            'circle-stroke-width':2,
+            'circle-stroke-color':'#007bff'
+        }
+    });
+
+    allBounds = new mapboxgl.LngLatBounds();
+
+    trackData.forEach(p=>{
+        allBounds.extend([p.lon,p.lat]);
+    });
+
+    map.fitBounds(allBounds,{padding:40});
+
+}
+*/
+
+
+// ============================
+// ADD POI
+// ============================
+
+function addPOILayer(geojson){
+
+    if(map.getLayer('poi-layer')) map.removeLayer('poi-layer');
+    if(map.getSource('poi-source')) map.removeSource('poi-source');
+
+    map.addSource('poi-source',{
+        type:'geojson',
+        data:geojson
+    });
+
+    map.addLayer({
+        id:'poi-layer',
+        type:'circle',
+        source:'poi-source',
+        paint:{
+            'circle-radius':7,
+            'circle-color':'#ff5252',
+            'circle-stroke-width':2,
+            'circle-stroke-color':'white'
+        }
+    });
+
+    generatePOIForChart(geojson);
+
+}
+
+
+// ============================
+// POI PE PROFIL
+// ============================
+
+function generatePOIForChart(geojson){
+
+    poiPoints = geojson.features.map(f=>{
+
+        const coord = f.geometry.coordinates;
+
+        let closest = trackData.reduce((prev,curr)=>{
+
+            const d1 = Math.abs(curr.lon-coord[0])+Math.abs(curr.lat-coord[1]);
+            const d2 = Math.abs(prev.lon-coord[0])+Math.abs(prev.lat-coord[1]);
+
+            return d1<d2 ? curr : prev;
+
+        });
+
+        return{
+            dist:closest.dist,
+            name:f.properties?.name || "POI"
+        };
+
+    });
+
+    renderChart('#007bff');
+
+}
+
+
+// ============================
+// CLICK POI
+// ============================
+
+map.on('click','poi-layer',(e)=>{
+
+    const feature = e.features[0];
+    const coord = feature.geometry.coordinates;
+    const props = feature.properties || {};
+
+    // construim HTML frumos
+    let html = `<div style="
+        max-width:300px; 
+        padding:10px; 
+        border-radius:8px; 
+        background: rgba(255,255,255,0.95); 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        color: #333;
+    ">`;
+
+    Object.keys(props).forEach(key => {
+
+        const value = props[key];
+        if(value !== null && value !== undefined && value !== ""){
+
+            // icon simplu pentru anumite chei
+            let icon = '';
+            if(key.toLowerCase().includes('name')) icon = '📍 ';
+            if(key.toLowerCase().includes('apa')) icon = '💧 ';
+            if(key.toLowerCase().includes('tip')) icon = '🏕️ ';
+
+            // linkuri clickabile
+            let displayValue = value;
+            if(typeof value === "string" && value.startsWith("http")){
+                displayValue = `<a href="${value}" target="_blank">${value}</a>`;
+            }
+
+            html += `<div style="margin-bottom:4px;"><strong>${icon}${key}</strong>: ${displayValue}</div>`;
+        }
+
+    });
+
+    html += `</div>`;
+
+    new mapboxgl.Popup({offset:25,closeButton:true})
+        .setLngLat(coord)
+        .setHTML(html)
+        .addTo(map);
+
+
+    // highlight pe profil
+    let closestIndex = trackData.reduce((best,p,i)=>{
+
+        const d = Math.abs(p.lon-coord[0]) + Math.abs(p.lat-coord[1]);
+
+        if(d < best.dist){
+            best.dist = d;
+            best.index = i;
+        }
+
+        return best;
+
+    },{dist:Infinity,index:0}).index;
+
+    chart.setActiveElements([{datasetIndex:0,index:closestIndex}]);
+    chart.tooltip.setActiveElements([{datasetIndex:0,index:closestIndex}],{x:0,y:0});
+    chart.update();
+
+});
+
+// ============================
+// RENDER CHART
+// ============================
 
 function renderChart(color) {
     if (chart) chart.destroy();
@@ -156,26 +441,22 @@ function syncMapToZoom(minKm, maxKm) {
     segment.forEach(p => bounds.extend([p.lon, p.lat]));
     map.fitBounds(bounds, { padding: 50 });
 }
+// ============================
+// HAVERSINE
+// ============================
 
-function renderMap(geojson) {
-    if (map.getLayer('route')) map.removeLayer('route');
-    if (map.getSource('route')) map.removeSource('route');
-    if (map.getLayer('hover-point')) map.removeLayer('hover-point');
-    if (map.getSource('hover-point')) map.removeSource('hover-point');
-    map.addSource('route', { type: 'geojson', data: geojson });
-    map.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#007bff', 'line-width': 4 }});
-    map.addSource('hover-point', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Point', coordinates: [] }}});
-    map.addLayer({ id: 'hover-point', type: 'circle', source: 'hover-point', paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-width': 2, 'circle-stroke-color': '#007bff' }});
-    allBounds = new mapboxgl.LngLatBounds();
-    geojson.features[0].geometry.coordinates.forEach(c => allBounds.extend(c));
-    map.fitBounds(allBounds, { padding: 40 });
-}
+function haversine(a,b){
 
-function haversine(a, b) {
     const R = 6371000;
-    const rad = x => x * Math.PI / 180;
-    const h = Math.sin(rad(b.lat-a.lat)/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(rad(b.lon-a.lon)/2)**2;
-    return 2 * R * Math.asin(Math.sqrt(h));
+    const rad = x=>x*Math.PI/180;
+
+    const h =
+        Math.sin(rad(b.lat-a.lat)/2)**2 +
+        Math.cos(rad(a.lat))*Math.cos(rad(b.lat)) *
+        Math.sin(rad(b.lon-a.lon)/2)**2;
+
+    return 2*R*Math.asin(Math.sqrt(h));
+
 }
 
-window.addEventListener('resize', () => map.resize());
+window.addEventListener('resize',()=>map.resize());

@@ -11,6 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
 
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -31,7 +32,9 @@
     </div>
 
     <div class="controls">
-      <input type="file" id="fileInput" accept=".gpx" />
+    
+      <input type="file" id="fileInput" accept=".gpx,.kml,.geojson,.json">
+      <input type="file" id="poiInput" accept=".geojson,.json"> 
       <button onclick="fullReset()">Reset Vizual</button>
     </div>
     
