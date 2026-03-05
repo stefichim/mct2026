@@ -18,6 +18,11 @@
 <body>
   
   <div class="top-bar">
+    <div class="map-style-picker">
+  <button onclick="changeStyle('mapbox://styles/mapbox/outdoors-v12')">Outdoor</button>
+  <button onclick="changeStyle('mapbox://styles/mapbox/satellite-v9')">Satellite</button>
+  <button onclick="changeStyle('mapbox://styles/mapbox/satellite-streets-v12')">Hybrid</button>
+</div>
     <div class="segment-calc">
       De la: <input type="number" id="kmA" step="0.1" placeholder="0"> km
       La: <input type="number" id="kmB" step="0.1" placeholder="10"> km

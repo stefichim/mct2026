@@ -98,3 +98,27 @@ button:hover { background: #0056b3; }
   .chart-wrapper { height: 200px; }
   .segment-calc { justify-content: space-between; }
 }
+
+.map-style-picker {
+  position: absolute;
+  top: 80px; /* Sub top-bar */
+  left: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.map-style-picker button {
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  border: 1px solid #ccc;
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.map-style-picker button:hover {
+  background: #fff;
+}

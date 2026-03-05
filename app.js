@@ -1,8 +1,7 @@
 mapboxgl.accessToken = 'pk.eyJ1IjoiYW5kcmVpbW9sZG92YW4iLCJhIjoiY2t2bGI4bTFnMnA0bDJ2cTVjdnd5ejg4ciJ9.efC4UMaX2e0Yft-Qs9wEBQ';
 
-let chart, trackData = [], allBounds;
+let chart, trackData = [], allBounds, currentGeoJSON = null;
 
-// 1. INIȚIALIZARE HARTĂ - Control cu UN SINGUR DEGET
 const map = new mapboxgl.Map({
     container: 'map',
     style: 'mapbox://styles/mapbox/outdoors-v12',
@@ -12,18 +11,21 @@ const map = new mapboxgl.Map({
     dragPan: true
 });
 
-map.addControl(new mapboxgl.NavigationControl({
-    showCompass: true,
-    visualizePitch: true
-}), 'top-right');
+// FUNCȚIE SCHIMBARE STIL
+function changeStyle(styleUrl) {
+    map.setStyle(styleUrl);
+    // Mapbox șterge straturile la schimbarea stilului. 
+    // Trebuie să așteptăm ca noul stil să se încarce pentru a repune traseul.
+    map.once('style.load', () => {
+        if (currentGeoJSON) {
+            renderMap(currentGeoJSON);
+        }
+    });
+}
 
-map.addControl(new mapboxgl.GeolocateControl({
-    positionOptions: { enableHighAccuracy: true },
-    trackUserLocation: true,
-    showUserHeading: true
-}), 'top-right');
+map.addControl(new mapboxgl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right');
+map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true, showUserHeading: true }), 'top-right');
 
-// 2. ÎNCĂRCARE GPX
 document.getElementById("fileInput").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -33,6 +35,7 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
             const parser = new DOMParser();
             const xml = parser.parseFromString(evt.target.result, "text/xml");
             const geojson = toGeoJSON.gpx(xml);
+            currentGeoJSON = geojson; // Salvăm pentru re-render la schimbarea stilului
             processData(geojson);
         } catch (err) { alert("Eroare GPX!"); }
     };
@@ -59,7 +62,6 @@ function processData(geojson) {
     document.getElementById("info").innerText = `Traseu: ${(totalDist / 1000).toFixed(2)} km`;
 }
 
-// 3. GRAFIC (Cu info afișat direct pe Pointer/Tooltip)
 function renderChart(color) {
     if (chart) chart.destroy();
     const ctx = document.getElementById("chart").getContext("2d");
@@ -81,66 +83,36 @@ function renderChart(color) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { display: false },
-                // CONFIGURARE INFO PE CHART (Tooltip)
                 tooltip: {
                     enabled: true,
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                    titleColor: '#fff',
-                    bodyColor: '#fff',
                     callbacks: {
-                        title: (context) => {
-                            // Afișează Km întreg
-                            return `Km: ${Math.floor(context[0].parsed.x)}`;
-                        },
-                        label: (context) => {
-                            // Afișează Altitudine întreagă
-                            return `Altitude: ${Math.round(context.parsed.y)}`;
-                        }
+                        title: (ctx) => `Km: ${Math.floor(ctx[0].parsed.x)}`,
+                        label: (ctx) => `Altitude: ${Math.round(ctx.parsed.y)}`
                     }
                 },
                 zoom: {
                     limits: { x: { min: 0, max: maxDist, minRange: 0.1 } },
                     zoom: {
-                        wheel: { enabled: true },
-                        pinch: { enabled: true },
-                        mode: 'x',
-                        drag: {
-                            enabled: true,
-                            backgroundColor: 'rgba(0, 123, 255, 0.2)',
-                            borderColor: color,
-                            borderWidth: 1
-                        },
-                        onZoomComplete: ({chart}) => {
-                            const {min, max} = chart.scales.x;
-                            syncMapToZoom(min, max);
-                        }
+                        wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x',
+                        drag: { enabled: true, backgroundColor: 'rgba(0, 123, 255, 0.2)', borderColor: color, borderWidth: 1 },
+                        onZoomComplete: ({chart}) => syncMapToZoom(chart.scales.x.min, chart.scales.x.max)
                     },
                     pan: { enabled: true, mode: 'x' }
                 }
             },
             scales: {
-                x: { 
-                    type: 'linear', 
-                    min: 0, 
-                    max: maxDist,
-                    ticks: { callback: value => Math.floor(value) } 
-                },
+                x: { type: 'linear', min: 0, max: maxDist, ticks: { callback: v => Math.floor(v) } },
                 y: { min: 0 }
             },
             onHover: (e, elements) => {
                 if (elements.length > 0) {
                     const p = trackData[elements[0].index];
                     if (map.getSource('hover-point')) {
-                        map.getSource('hover-point').setData({ 
-                            type: 'Feature', 
-                            geometry: { type: 'Point', coordinates: [p.lon, p.lat] }
-                        });
+                        map.getSource('hover-point').setData({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] }});
                     }
                 }
             }
@@ -148,14 +120,12 @@ function renderChart(color) {
     });
 }
 
-// 4. RESETARE
 function fullReset() {
     if (chart) chart.resetZoom();
     if (allBounds) map.fitBounds(allBounds, { padding: 40 });
     map.easeTo({ bearing: 0, pitch: 0 }); 
 }
 
-// 5. CALCUL SEGMENT
 function calculateSegmentGain() {
     const start = Math.min(parseFloat(document.getElementById('kmA').value) || 0, parseFloat(document.getElementById('kmB').value) || 0);
     const end = Math.max(parseFloat(document.getElementById('kmA').value) || 0, parseFloat(document.getElementById('kmB').value) || 0);
@@ -167,13 +137,12 @@ function calculateSegmentGain() {
         const diff = segment[i].ele - segment[i - 1].ele;
         if (diff > 0) gain += diff;
     }
-    document.getElementById('segmentResult').innerHTML = `↑${Math.round(gain)}m urcare`;
+    document.getElementById('segmentResult').innerHTML = `↑${Math.round(gain)}m`;
     const bounds = new mapboxgl.LngLatBounds();
     segment.forEach(p => bounds.extend([p.lon, p.lat]));
     map.fitBounds(bounds, { padding: 50 });
 }
 
-// 6. UTILS
 function syncMapToZoom(minKm, maxKm) {
     const segment = trackData.filter(p => p.dist >= minKm && p.dist <= maxKm);
     if (segment.length < 2) return;
@@ -183,18 +152,18 @@ function syncMapToZoom(minKm, maxKm) {
 }
 
 function renderMap(geojson) {
+    // Curățăm vechile surse dacă există (important la schimbarea stilului)
     if (map.getLayer('route')) map.removeLayer('route');
     if (map.getSource('route')) map.removeSource('route');
+    if (map.getLayer('hover-point')) map.removeLayer('hover-point');
+    if (map.getSource('hover-point')) map.removeSource('hover-point');
+
     map.addSource('route', { type: 'geojson', data: geojson });
-    map.addLayer({
-        id: 'route', type: 'line', source: 'route',
-        paint: { 'line-color': '#007bff', 'line-width': 4 }
-    });
-    if (!map.getSource('hover-point')) {
-        map.addSource('hover-point', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Point', coordinates: [] }}});
-        map.addLayer({ id: 'hover-point', type: 'circle', source: 'hover-point', 
-            paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-width': 2, 'circle-stroke-color': '#007bff' }});
-    }
+    map.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#007bff', 'line-width': 4 }});
+
+    map.addSource('hover-point', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Point', coordinates: [] }}});
+    map.addLayer({ id: 'hover-point', type: 'circle', source: 'hover-point', paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-width': 2, 'circle-stroke-color': '#007bff' }});
+    
     allBounds = new mapboxgl.LngLatBounds();
     geojson.features[0].geometry.coordinates.forEach(c => allBounds.extend(c));
     map.fitBounds(allBounds, { padding: 40 });
