@@ -77,6 +77,18 @@ button {
   transition: background 0.2s;
 }
 
+.mapboxgl-popup-content {
+    padding: 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    color: #333;
+    border: 1px solid #007bff;
+}
+
+.mapboxgl-popup-tip {
+    border-top-color: #007bff !important;
+}
 button:hover { background: #0056b3; }
 
 .controls { display: flex; gap: 10px; align-items: center; }

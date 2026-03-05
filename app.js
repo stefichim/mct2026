@@ -1,29 +1,22 @@
-/**
- * GPX Viewer - Full Stable Version
- * Fixes: Elevation filter (Z < 0), Map Navigation, Nord Reset, Segment Calc
- */
-
 mapboxgl.accessToken = 'pk.eyJ1IjoiYW5kcmVpbW9sZG92YW4iLCJhIjoiY2t2bGI4bTFnMnA0bDJ2cTVjdnd5ejg4ciJ9.efC4UMaX2e0Yft-Qs9wEBQ';
 
 let chart, trackData = [], allBounds;
 
-// 1. INIȚIALIZARE HARTĂ - Vedere Globală
+// 1. INIȚIALIZARE HARTĂ - Control cu UN SINGUR DEGET
 const map = new mapboxgl.Map({
     container: 'map',
     style: 'mapbox://styles/mapbox/outdoors-v12',
     center: [0, 0],
     zoom: 1.5,
-    cooperativeGestures: false 
+    cooperativeGestures: false, 
+    dragPan: true
 });
 
-// Adaugă butoane Navigare: Zoom și BUSOLA (NORD)
 map.addControl(new mapboxgl.NavigationControl({
     showCompass: true,
-    showZoom: true,
     visualizePitch: true
 }), 'top-right');
 
-// Buton Locație
 map.addControl(new mapboxgl.GeolocateControl({
     positionOptions: { enableHighAccuracy: true },
     trackUserLocation: true,
@@ -35,16 +28,13 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    document.getElementById("info").innerText = "Se procesează...";
     reader.onload = (evt) => {
         try {
             const parser = new DOMParser();
             const xml = parser.parseFromString(evt.target.result, "text/xml");
             const geojson = toGeoJSON.gpx(xml);
             processData(geojson);
-        } catch (err) {
-            alert("Eroare la procesarea fișierului.");
-        }
+        } catch (err) { alert("Eroare GPX!"); }
     };
     reader.readAsText(file);
 });
@@ -53,13 +43,11 @@ function processData(geojson) {
     trackData = [];
     let totalDist = 0;
     const feature = geojson.features.find(f => f.geometry.type === 'LineString');
-    if (!feature) return alert("GPX-ul nu conține un traseu valid.");
+    if (!feature) return;
 
     feature.geometry.coordinates.forEach((c, i) => {
-        // FILTRU Z: Ignoră valorile sub nivelul mării
         let z = c[2] || 0;
         if (z < 0) z = 0; 
-
         const pt = { lon: c[0], lat: c[1], ele: Math.round(z) };
         if (i > 0) totalDist += haversine(trackData[i-1], pt);
         pt.dist = Number((totalDist / 1000).toFixed(3));
@@ -68,11 +56,10 @@ function processData(geojson) {
 
     renderMap(geojson);
     renderChart('#007bff');
-    document.getElementById("info").innerText = `Traseu încărcat (${totalDist.toFixed(1)} m total)`;
+    document.getElementById("info").innerText = `Traseu: ${(totalDist / 1000).toFixed(2)} km`;
 }
 
-// 3. GRAFIC (Cu Zoom și Drag activat)
-
+// 3. GRAFIC (Cu info afișat direct pe Pointer/Tooltip)
 function renderChart(color) {
     if (chart) chart.destroy();
     const ctx = document.getElementById("chart").getContext("2d");
@@ -94,11 +81,31 @@ function renderChart(color) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
             plugins: {
                 legend: { display: false },
+                // CONFIGURARE INFO PE CHART (Tooltip)
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    callbacks: {
+                        title: (context) => {
+                            // Afișează Km întreg
+                            return `Km: ${Math.floor(context[0].parsed.x)}`;
+                        },
+                        label: (context) => {
+                            // Afișează Altitudine întreagă
+                            return `Altitude: ${Math.round(context.parsed.y)}`;
+                        }
+                    }
+                },
                 zoom: {
-                    limits: { x: { min: 0, max: maxDist, minRange: 0.2 } },
+                    limits: { x: { min: 0, max: maxDist, minRange: 0.1 } },
                     zoom: {
                         wheel: { enabled: true },
                         pinch: { enabled: true },
@@ -118,15 +125,20 @@ function renderChart(color) {
                 }
             },
             scales: {
-                x: { type: 'linear', min: 0, max: maxDist, ticks: { font: { size: 10 } } },
-                y: { min: 0, ticks: { font: { size: 10 } } }
+                x: { 
+                    type: 'linear', 
+                    min: 0, 
+                    max: maxDist,
+                    ticks: { callback: value => Math.floor(value) } 
+                },
+                y: { min: 0 }
             },
             onHover: (e, elements) => {
                 if (elements.length > 0) {
                     const p = trackData[elements[0].index];
                     if (map.getSource('hover-point')) {
-                        map.getSource('hover-point').setData({
-                            type: 'Feature',
+                        map.getSource('hover-point').setData({ 
+                            type: 'Feature', 
                             geometry: { type: 'Point', coordinates: [p.lon, p.lat] }
                         });
                     }
@@ -136,39 +148,29 @@ function renderChart(color) {
     });
 }
 
-// 4. CALCUL SEGMENT MANUAL
+// 4. RESETARE
+function fullReset() {
+    if (chart) chart.resetZoom();
+    if (allBounds) map.fitBounds(allBounds, { padding: 40 });
+    map.easeTo({ bearing: 0, pitch: 0 }); 
+}
+
+// 5. CALCUL SEGMENT
 function calculateSegmentGain() {
-    const kmA = parseFloat(document.getElementById('kmA').value) || 0;
-    const kmB = parseFloat(document.getElementById('kmB').value) || 0;
-    const start = Math.min(kmA, kmB);
-    const end = Math.max(kmA, kmB);
-    
+    const start = Math.min(parseFloat(document.getElementById('kmA').value) || 0, parseFloat(document.getElementById('kmB').value) || 0);
+    const end = Math.max(parseFloat(document.getElementById('kmA').value) || 0, parseFloat(document.getElementById('kmB').value) || 0);
     const segment = trackData.filter(p => p.dist >= start && p.dist <= end);
-    if (segment.length < 2) {
-        document.getElementById('segmentResult').innerText = "Interval invalid.";
-        return;
-    }
+    if (segment.length < 2) return;
 
     let gain = 0;
     for (let i = 1; i < segment.length; i++) {
         const diff = segment[i].ele - segment[i - 1].ele;
         if (diff > 0) gain += diff;
     }
-
     document.getElementById('segmentResult').innerHTML = `↑${Math.round(gain)}m urcare`;
-    
-    // Zoom harta pe segmentul respectiv
     const bounds = new mapboxgl.LngLatBounds();
     segment.forEach(p => bounds.extend([p.lon, p.lat]));
     map.fitBounds(bounds, { padding: 50 });
-}
-
-// 5. RESETARE COMPLETĂ
-function fullReset() {
-    if (chart) chart.resetZoom();
-    if (allBounds) map.fitBounds(allBounds, { padding: 40 });
-    // Resetează Nordul și Înclinarea
-    map.easeTo({ bearing: 0, pitch: 0 });
 }
 
 // 6. UTILS
@@ -201,8 +203,7 @@ function renderMap(geojson) {
 function haversine(a, b) {
     const R = 6371000;
     const rad = x => x * Math.PI / 180;
-    const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
-    const h = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;
+    const h = Math.sin(rad(b.lat-a.lat)/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(rad(b.lon-a.lon)/2)**2;
     return 2 * R * Math.asin(Math.sqrt(h));
 }
 
