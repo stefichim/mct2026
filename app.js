@@ -7,24 +7,19 @@ const map = new mapboxgl.Map({
     style: 'mapbox://styles/mapbox/outdoors-v12',
     center: [0, 0],
     zoom: 1.5,
-    cooperativeGestures: false, 
+    cooperativeGestures: false, // Un singur deget pe mobil
     dragPan: true
 });
 
-// FUNCȚIE SCHIMBARE STIL
 function changeStyle(styleUrl) {
     map.setStyle(styleUrl);
-    // Mapbox șterge straturile la schimbarea stilului. 
-    // Trebuie să așteptăm ca noul stil să se încarce pentru a repune traseul.
     map.once('style.load', () => {
-        if (currentGeoJSON) {
-            renderMap(currentGeoJSON);
-        }
+        if (currentGeoJSON) renderMap(currentGeoJSON);
     });
 }
 
-map.addControl(new mapboxgl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right');
-map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true, showUserHeading: true }), 'top-right');
+map.addControl(new mapboxgl.NavigationControl({ showCompass: true }), 'top-right');
+map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), 'top-right');
 
 document.getElementById("fileInput").addEventListener("change", (e) => {
     const file = e.target.files[0];
@@ -35,26 +30,41 @@ document.getElementById("fileInput").addEventListener("change", (e) => {
             const parser = new DOMParser();
             const xml = parser.parseFromString(evt.target.result, "text/xml");
             const geojson = toGeoJSON.gpx(xml);
-            currentGeoJSON = geojson; // Salvăm pentru re-render la schimbarea stilului
+            currentGeoJSON = geojson;
             processData(geojson);
-        } catch (err) { alert("Eroare GPX!"); }
+        } catch (err) { alert("Eroare la procesarea GPX-ului."); }
     };
     reader.readAsText(file);
 });
 
 function processData(geojson) {
-    trackData = [];
+    let rawData = [];
     let totalDist = 0;
     const feature = geojson.features.find(f => f.geometry.type === 'LineString');
     if (!feature) return;
 
-    feature.geometry.coordinates.forEach((c, i) => {
+    const coords = feature.geometry.coordinates;
+    coords.forEach((c) => {
         let z = c[2] || 0;
-        if (z < 0) z = 0; 
-        const pt = { lon: c[0], lat: c[1], ele: Math.round(z) };
-        if (i > 0) totalDist += haversine(trackData[i-1], pt);
-        pt.dist = Number((totalDist / 1000).toFixed(3));
-        trackData.push(pt);
+        if (z < 0) z = 0;
+        rawData.push({ lon: c[0], lat: c[1], ele: z });
+    });
+
+    // SMOOTHING: Moving Average (5 puncte)
+    trackData = rawData.map((pt, i, arr) => {
+        const windowSize = 5;
+        const startIdx = Math.max(0, i - Math.floor(windowSize / 2));
+        const endIdx = Math.min(arr.length, startIdx + windowSize);
+        const subSet = arr.slice(startIdx, endIdx);
+        const avgEle = subSet.reduce((sum, p) => sum + p.ele, 0) / subSet.length;
+
+        if (i > 0) totalDist += haversine(arr[i-1], pt);
+        
+        return {
+            ...pt,
+            ele: Math.round(avgEle),
+            dist: Number((totalDist / 1000).toFixed(3))
+        };
     });
 
     renderMap(geojson);
@@ -90,15 +100,15 @@ function renderChart(color) {
                     enabled: true,
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
                     callbacks: {
-                        title: (ctx) => `Km: ${Math.floor(ctx[0].parsed.x)}`,
-                        label: (ctx) => `Altitude: ${Math.round(ctx.parsed.y)}`
+                        title: (items) => `Km: ${Math.floor(items[0].parsed.x)}`,
+                        label: (item) => `Alt: ${Math.round(item.parsed.y)} m`
                     }
                 },
                 zoom: {
                     limits: { x: { min: 0, max: maxDist, minRange: 0.1 } },
                     zoom: {
                         wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x',
-                        drag: { enabled: true, backgroundColor: 'rgba(0, 123, 255, 0.2)', borderColor: color, borderWidth: 1 },
+                        drag: { enabled: true, backgroundColor: 'rgba(0, 123, 255, 0.2)' },
                         onZoomComplete: ({chart}) => syncMapToZoom(chart.scales.x.min, chart.scales.x.max)
                     },
                     pan: { enabled: true, mode: 'x' }
@@ -131,16 +141,12 @@ function calculateSegmentGain() {
     const end = Math.max(parseFloat(document.getElementById('kmA').value) || 0, parseFloat(document.getElementById('kmB').value) || 0);
     const segment = trackData.filter(p => p.dist >= start && p.dist <= end);
     if (segment.length < 2) return;
-
     let gain = 0;
     for (let i = 1; i < segment.length; i++) {
         const diff = segment[i].ele - segment[i - 1].ele;
         if (diff > 0) gain += diff;
     }
     document.getElementById('segmentResult').innerHTML = `↑${Math.round(gain)}m`;
-    const bounds = new mapboxgl.LngLatBounds();
-    segment.forEach(p => bounds.extend([p.lon, p.lat]));
-    map.fitBounds(bounds, { padding: 50 });
 }
 
 function syncMapToZoom(minKm, maxKm) {
@@ -152,18 +158,14 @@ function syncMapToZoom(minKm, maxKm) {
 }
 
 function renderMap(geojson) {
-    // Curățăm vechile surse dacă există (important la schimbarea stilului)
     if (map.getLayer('route')) map.removeLayer('route');
     if (map.getSource('route')) map.removeSource('route');
     if (map.getLayer('hover-point')) map.removeLayer('hover-point');
     if (map.getSource('hover-point')) map.removeSource('hover-point');
-
     map.addSource('route', { type: 'geojson', data: geojson });
     map.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#007bff', 'line-width': 4 }});
-
     map.addSource('hover-point', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Point', coordinates: [] }}});
     map.addLayer({ id: 'hover-point', type: 'circle', source: 'hover-point', paint: { 'circle-radius': 7, 'circle-color': '#fff', 'circle-stroke-width': 2, 'circle-stroke-color': '#007bff' }});
-    
     allBounds = new mapboxgl.LngLatBounds();
     geojson.features[0].geometry.coordinates.forEach(c => allBounds.extend(c));
     map.fitBounds(allBounds, { padding: 40 });

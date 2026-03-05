@@ -7,7 +7,6 @@
   
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
-  
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
@@ -18,21 +17,24 @@
 <body>
   
   <div class="top-bar">
-    <div class="map-style-picker">
-  <button onclick="changeStyle('mapbox://styles/mapbox/outdoors-v12')">Outdoor</button>
-  <button onclick="changeStyle('mapbox://styles/mapbox/satellite-v9')">Satellite</button>
-  <button onclick="changeStyle('mapbox://styles/mapbox/satellite-streets-v12')">Hybrid</button>
-</div>
     <div class="segment-calc">
       De la: <input type="number" id="kmA" step="0.1" placeholder="0"> km
       La: <input type="number" id="kmB" step="0.1" placeholder="10"> km
       <button onclick="calculateSegmentGain()">Calculează</button>
       <span id="segmentResult"></span>
     </div>
+
+    <div class="map-style-picker">
+      <button onclick="changeStyle('mapbox://styles/mapbox/outdoors-v12')">Outdoor</button>
+      <button onclick="changeStyle('mapbox://styles/mapbox/satellite-v9')">Satellite</button>
+      <button onclick="changeStyle('mapbox://styles/mapbox/satellite-streets-v12')">Hybrid</button>
+    </div>
+
     <div class="controls">
       <input type="file" id="fileInput" accept=".gpx" />
       <button onclick="fullReset()">Reset Vizual</button>
     </div>
+    
     <div id="info">Așteptare fișier...</div>
   </div>
 
