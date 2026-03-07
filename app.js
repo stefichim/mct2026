@@ -16,6 +16,13 @@ const map = new mapboxgl.Map({
 
 map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
+function changeStyle(styleUrl) {
+    map.setStyle(styleUrl);
+    map.once('style.load', () => {
+        if (currentGeoJSON) renderMap(currentGeoJSON);
+    });
+}
+
 
 // ============================
 // FILE INPUT TRASEU
@@ -104,47 +111,55 @@ document.getElementById("poiInput").addEventListener("change",(e)=>{
 // PROCESS DATA
 // ============================
 
-function processData(geojson){
-
+function processData(geojson) {
     let rawData = [];
     let totalDist = 0;
 
-    const routeFeature = geojson.features.find(f =>
-        f.geometry.type === 'LineString' ||
-        f.geometry.type === 'MultiLineString'
-    );
-
-    if(!routeFeature) return;
-
-    const coords = routeFeature.geometry.type === 'MultiLineString'
-        ? routeFeature.geometry.coordinates.flat()
-        : routeFeature.geometry.coordinates;
-
-    coords.forEach(c=>{
-
-        rawData.push({
-            lon:c[0],
-            lat:c[1],
-            ele:c[2] || 0
-        });
-
+    // În loc de .find(), folosim .forEach() pentru a parcurge TOATE elementele
+    geojson.features.forEach(feature => {
+        // Verificăm dacă elementul este o linie (LineString sau MultiLineString)
+        // Librăria toGeoJSON transformă <trk> și <rte> în aceste tipuri
+        if (feature.geometry.type === 'LineString') {
+            const coords = feature.geometry.coordinates;
+            coords.forEach(c => {
+                rawData.push({
+                    lon: c[0],
+                    lat: c[1],
+                    ele: c[2] || 0
+                });
+            });
+        } else if (feature.geometry.type === 'MultiLineString') {
+            // Dacă un <trk> are mai multe <trkseg>, devine adesea MultiLineString
+            feature.geometry.coordinates.forEach(segment => {
+                segment.forEach(c => {
+                    rawData.push({ lon: c[0], lat: c[1], ele: c[2] || 0 });
+                });
+            });
+        }
     });
 
-    trackData = rawData.map((pt,i,arr)=>{
+    if (rawData.length === 0) {
+        alert("Nu s-au găsit date de tip traseu în fișier.");
+        return;
+    }
 
-        if(i>0)
-            totalDist += haversine(arr[i-1],pt);
-
-        return{
+    // Calculăm distanța cumulativă și profilul de elevație
+    trackData = rawData.map((pt, i, arr) => {
+        // Aplicăm un mic smoothing (Moving Average) pentru a rafina distanța
+        if (i > 0) {
+            totalDist += haversine(arr[i - 1], pt);
+        }
+        return {
             ...pt,
-            dist:totalDist/1000
+            dist: totalDist / 1000 // KM
         };
-
     });
 
     renderChart('#007bff');
     renderMap(geojson);
 
+    const kmTotal = (totalDist / 1000).toFixed(2);
+    document.getElementById("info").innerText = `Traseu total: ${kmTotal} km | Puncte: ${rawData.length}`;
 }
 
 
