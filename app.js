@@ -226,27 +226,74 @@ function renderMap(geojson){
 function addPOILayer(geojson){
 
     if(map.getLayer('poi-layer')) map.removeLayer('poi-layer');
+    if(map.getLayer('poi-cluster')) map.removeLayer('poi-cluster');
+    if(map.getLayer('poi-count')) map.removeLayer('poi-count');
     if(map.getSource('poi-source')) map.removeSource('poi-source');
 
+    // Add source with clustering
     map.addSource('poi-source',{
         type:'geojson',
-        data:geojson
+        data:geojson,
+        cluster: true,
+        clusterMaxZoom: 14, // max zoom to cluster points
+        clusterRadius: 50 // radius of each cluster
     });
 
+    // Cluster circles
     map.addLayer({
-        id:'poi-layer',
-        type:'circle',
-        source:'poi-source',
-        paint:{
-            'circle-radius':7,
-            'circle-color':'#ff5252',
-            'circle-stroke-width':2,
-            'circle-stroke-color':'white'
+        id: 'poi-cluster',
+        type: 'circle',
+        source: 'poi-source',
+        filter: ['has', 'point_count'],
+        paint: {
+            'circle-color': '#ff7f50',
+            'circle-radius': [
+                'step',
+                ['get', 'point_count'],
+                15,  // 1-9 points
+                10, 20, // 10-29 points
+                30, 25, // 30+ points
+            ],
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#fff'
         }
     });
 
-    generatePOIForChart(geojson);
+    // Cluster labels
+    map.addLayer({
+        id: 'poi-count',
+        type: 'symbol',
+        source: 'poi-source',
+        filter: ['has','point_count'],
+        layout: {
+            'text-field': '{point_count_abbreviated}',
+            'text-font': ['Arial Unicode MS Bold'],
+            'text-size': 12
+        },
+        paint: {
+            'text-color': '#fff'
+        }
+    });
 
+    // Individual POIs with custom icon (accommodation)
+    map.loadImage('https://img.icons8.com/emoji/48/000000/hotel-emoji.png', function(error, image) {
+        if (error) throw error;
+        if (!map.hasImage('accommodation')) map.addImage('accommodation', image);
+
+        map.addLayer({
+            id: 'poi-layer',
+            type: 'symbol',
+            source: 'poi-source',
+            filter: ['!', ['has', 'point_count']], // only single points
+            layout: {
+                'icon-image': 'accommodation',
+                'icon-size': 0.7,
+                'icon-allow-overlap': true
+            }
+        });
+    });
+
+    generatePOIForChart(geojson);
 }
 
 
